@@ -422,7 +422,7 @@ impl LogEvent {
         }
     }
 
-    pub fn keys(&self) -> Option<impl Iterator<Item = KeyString> + '_> {
+    pub fn keys(&self) -> Option<impl Iterator<Item = OwnedTargetPath> + '_> {
         match &self.inner.fields {
             Value::Object(map) => Some(util::log::keys(map)),
             _ => None,
@@ -430,25 +430,23 @@ impl LogEvent {
     }
 
     /// If the event root value is a map, build and return an iterator to event field and value pairs.
-    /// TODO: Ideally this should return target paths to be consistent with other `LogEvent` methods.
     pub fn all_event_fields(
         &self,
-    ) -> Option<impl Iterator<Item = (KeyString, &Value)> + Serialize> {
+    ) -> Option<impl Iterator<Item = (OwnedTargetPath, &Value)> + Serialize> {
         self.as_map().map(all_fields)
     }
 
     /// Similar to [`LogEvent::all_event_fields`], but doesn't traverse individual array elements.
     pub fn all_event_fields_skip_array_elements(
         &self,
-    ) -> Option<impl Iterator<Item = (KeyString, &Value)> + Serialize> {
+    ) -> Option<impl Iterator<Item = (OwnedTargetPath, &Value)> + Serialize> {
         self.as_map().map(all_fields_skip_array_elements)
     }
 
     /// If the metadata root value is a map, build and return an iterator to metadata field and value pairs.
-    /// TODO: Ideally this should return target paths to be consistent with other `LogEvent` methods.
     pub fn all_metadata_fields(
         &self,
-    ) -> Option<impl Iterator<Item = (KeyString, &Value)> + Serialize> {
+    ) -> Option<impl Iterator<Item = (OwnedTargetPath, &Value)> + Serialize> {
         match self.metadata.value() {
             Value::Object(metadata_map) => Some(all_metadata_fields(metadata_map)),
             _ => None,
@@ -458,7 +456,7 @@ impl LogEvent {
     /// Returns an iterator of all fields if the value is an Object. Otherwise, a single field is
     /// returned with a "message" key. Field names that are could be interpreted as alternate paths
     /// (i.e. containing periods, square brackets, etc) are quoted.
-    pub fn convert_to_fields(&self) -> impl Iterator<Item = (KeyString, &Value)> + Serialize {
+    pub fn convert_to_fields(&self) -> impl Iterator<Item = (OwnedTargetPath, &Value)> + Serialize {
         if let Some(map) = self.as_map() {
             util::log::all_fields(map)
         } else {
@@ -470,7 +468,7 @@ impl LogEvent {
     /// returned with a "message" key. Field names are not quoted.
     pub fn convert_to_fields_unquoted(
         &self,
-    ) -> impl Iterator<Item = (KeyString, &Value)> + Serialize {
+    ) -> impl Iterator<Item = (OwnedTargetPath, &Value)> + Serialize {
         if let Some(map) = self.as_map() {
             util::log::all_fields_unquoted(map)
         } else {
@@ -1143,10 +1141,10 @@ mod test {
         log.insert("a", 0);
         log.insert("a.b", 1);
         log.insert("c", 2);
-        let actual: Vec<(KeyString, Value)> = log
+        let actual: Vec<(String, Value)> = log
             .all_event_fields()
             .unwrap()
-            .map(|(s, v)| (s, v.clone()))
+            .map(|(s, v)| (s.into(), v.clone()))
             .collect();
         assert_eq!(
             actual,
@@ -1160,10 +1158,10 @@ mod test {
         log.insert("%a", 0);
         log.insert("%a.b", 1);
         log.insert("%c", 2);
-        let actual: Vec<(KeyString, Value)> = log
+        let actual: Vec<(String, Value)> = log
             .all_metadata_fields()
             .unwrap()
-            .map(|(s, v)| (s, v.clone()))
+            .map(|(s, v)| (s.into(), v.clone()))
             .collect();
         assert_eq!(
             actual,
@@ -1180,10 +1178,10 @@ mod test {
             },
         }));
 
-        let actual: Vec<(KeyString, Value)> = log
+        let actual: Vec<(String, Value)> = log
             .all_event_fields_skip_array_elements()
             .unwrap()
-            .map(|(s, v)| (s, v.clone()))
+            .map(|(s, v)| (s.into(), v.clone()))
             .collect();
         assert_eq!(
             actual,

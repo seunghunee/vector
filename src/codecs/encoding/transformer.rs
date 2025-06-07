@@ -187,11 +187,11 @@ impl Transformer {
             let mut unix_timestamps = Vec::new();
             for (k, v) in log.all_event_fields().expect("must be an object") {
                 if let Value::Timestamp(ts) = v {
-                    unix_timestamps.push((k.clone(), extract(ts).into()));
+                    unix_timestamps.push((k, extract(ts).into()));
                 }
             }
             for (k, v) in unix_timestamps {
-                log.parse_path_and_insert(k, v).unwrap();
+                log.insert(&k, v).unwrap();
             }
         } else {
             // root is not an object

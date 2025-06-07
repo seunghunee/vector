@@ -170,7 +170,7 @@ impl TryFrom<Vec<Event>> for EventsApiModel {
 
                 let mut event_model = ObjectMap::new();
                 for (k, v) in log.convert_to_fields_unquoted() {
-                    event_model.insert(k, v.clone());
+                    event_model.insert(k.to_string().into(), v.clone());
                 }
 
                 if let Some(message) = log.get(event_path!("message")) {

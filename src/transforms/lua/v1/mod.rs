@@ -284,7 +284,7 @@ impl mlua::UserData for LuaEvent {
             let state = lua.create_table()?;
             {
                 if let Some(keys) = event.inner.as_log().keys() {
-                    let keys = lua.create_table_from(keys.map(|k| (k, true)))?;
+                    let keys = lua.create_table_from(keys.map(|k| (k.to_string(), true)))?;
                     state.raw_set("keys", keys)?;
                 }
                 state.raw_set("event", event)?;
@@ -576,8 +576,8 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(event.as_log()["name"], "nameBob".into());
-        assert_eq!(event.as_log()["friend"], "friendAlice".into());
+        assert_eq!(event.as_log()["name"], ".nameBob".into());
+        assert_eq!(event.as_log()["friend"], ".friendAlice".into());
     }
 
     fn transform_one(transform: &str, event: impl Into<Event>) -> Option<Event> {

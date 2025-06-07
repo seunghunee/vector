@@ -1,8 +1,9 @@
-use std::{collections::btree_map, fmt::Write as _, iter, slice, sync::LazyLock};
+use std::{collections::btree_map, iter, slice, str::FromStr, sync::LazyLock};
 
+use lookup::OwnedValuePath;
 use regex::Regex;
 use serde::{Serialize, Serializer};
-use vrl::path::PathPrefix;
+use vrl::path::{OwnedSegment, OwnedTargetPath, PathPrefix};
 
 use crate::event::{KeyString, ObjectMap, Value};
 
@@ -130,38 +131,32 @@ impl<'a> FieldsIter<'a> {
         self.path.pop();
     }
 
-    fn make_path(&mut self, component: PathComponent<'a>) -> KeyString {
-        let mut res = match self.path_prefix {
-            None => String::new(),
-            Some(prefix) => match prefix {
-                PathPrefix::Event => String::from("."),
-                PathPrefix::Metadata => String::from("%"),
-            },
-        };
-        let mut path_iter = self.path.iter().chain(iter::once(&component)).peekable();
-        loop {
-            match path_iter.next() {
-                None => break res.into(),
-                Some(PathComponent::Key(key)) => {
+    fn make_path(&mut self, component: PathComponent<'a>) -> OwnedTargetPath {
+        let segments = self
+            .path
+            .iter()
+            .chain(iter::once(&component))
+            .map(|c| match c {
+                PathComponent::Key(key) => {
                     if self.quote_invalid_fields && !IS_VALID_PATH_SEGMENT.is_match(key) {
-                        res.push_str(&format!("\"{key}\""));
+                        OwnedSegment::Field(KeyString::from(format!("\"{key}\"")))
                     } else {
-                        res.push_str(key);
+                        OwnedSegment::Field(KeyString::from((*key).clone()))
                     }
                 }
-                Some(PathComponent::Index(index)) => {
-                    write!(res, "[{index}]").expect("write to String never fails");
-                }
-            }
-            if let Some(PathComponent::Key(_)) = path_iter.peek() {
-                res.push('.');
-            }
+                PathComponent::Index(index) => OwnedSegment::Index(*index as isize), // TODO
+            })
+            .collect();
+
+        OwnedTargetPath {
+            prefix: self.path_prefix.unwrap_or(PathPrefix::Event),
+            path: OwnedValuePath { segments },
         }
     }
 }
 
 impl<'a> Iterator for FieldsIter<'a> {
-    type Item = (KeyString, &'a Value);
+    type Item = (OwnedTargetPath, &'a Value);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -187,7 +182,8 @@ impl<'a> Iterator for FieldsIter<'a> {
                     }
                 },
                 Some(LeafIter::Root((value, visited))) => {
-                    let result = (!*visited).then(|| ("message".into(), *value));
+                    let result = (!*visited)
+                        .then(|| (OwnedTargetPath::from_str("message").unwrap(), *value)); // TODO
                     *visited = true;
                     break result;
                 }
@@ -228,7 +224,9 @@ mod test {
         .map(|(k, v)| (k.into(), v))
         .collect();
 
-        let collected: Vec<_> = all_fields(&fields).collect();
+        let collected: Vec<_> = all_fields(&fields)
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
         assert_eq!(collected, expected);
     }
 
@@ -245,10 +243,12 @@ mod test {
     #[test]
     fn keys_special_quoted() {
         let fields = special_fields();
-        let mut collected: Vec<_> = all_fields(&fields).collect();
+        let mut collected: Vec<_> = all_fields(&fields)
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
         collected.sort_by(|(a, _), (b, _)| a.cmp(b));
 
-        let mut expected: Vec<(KeyString, &Value)> = vec![
+        let mut expected: Vec<(String, &Value)> = vec![
             ("\"a-b\"", &Value::Integer(1)),
             ("\"a*b\"", &Value::Integer(2)),
             ("\"a b\"", &Value::Integer(3)),
@@ -267,10 +267,12 @@ mod test {
     #[test]
     fn keys_special_unquoted() {
         let fields = special_fields();
-        let mut collected: Vec<_> = all_fields_unquoted(&fields).collect();
+        let mut collected: Vec<_> = all_fields_unquoted(&fields)
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
         collected.sort_by(|(a, _), (b, _)| a.cmp(b));
 
-        let mut expected: Vec<(KeyString, &Value)> = vec![
+        let mut expected: Vec<(String, &Value)> = vec![
             ("a-b", &Value::Integer(1)),
             ("a*b", &Value::Integer(2)),
             ("a b", &Value::Integer(3)),
@@ -301,7 +303,9 @@ mod test {
         .map(|(k, v)| (k.into(), v))
         .collect();
 
-        let collected: Vec<_> = all_metadata_fields(&fields).collect();
+        let collected: Vec<_> = all_metadata_fields(&fields)
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
         assert_eq!(collected, expected);
     }
 
@@ -340,7 +344,9 @@ mod test {
         .map(|(k, v)| (k.into(), v))
         .collect();
 
-        let collected: Vec<_> = all_fields(&fields).map(|(k, v)| (k, v.clone())).collect();
+        let collected: Vec<_> = all_fields(&fields)
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect();
         assert_eq!(collected, expected);
     }
 
@@ -363,7 +369,7 @@ mod test {
         .collect();
 
         let collected: Vec<_> = all_fields_unquoted(&fields)
-            .map(|(k, v)| (k, v.clone()))
+            .map(|(k, v)| (k.to_string(), v.clone()))
             .collect();
         assert_eq!(collected, expected);
     }

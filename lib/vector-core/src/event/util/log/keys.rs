@@ -1,10 +1,12 @@
+use lookup::OwnedTargetPath;
+
 use super::all_fields;
-use crate::event::{KeyString, ObjectMap};
+use crate::event::ObjectMap;
 
 /// Iterates over all paths in form `a.b[0].c[1]` in alphabetical order.
 /// It is implemented as a wrapper around `all_fields` to reduce code
 /// duplication.
-pub fn keys(fields: &ObjectMap) -> impl Iterator<Item = KeyString> + '_ {
+pub fn keys(fields: &ObjectMap) -> impl Iterator<Item = OwnedTargetPath> + '_ {
     all_fields(fields).map(|(k, _)| k)
 }
 
@@ -23,10 +25,10 @@ mod test {
         }));
         let expected: Vec<_> = vec!["field1", "field2", "field3"]
             .into_iter()
-            .map(KeyString::from)
+            .map(String::from)
             .collect();
 
-        let collected: Vec<_> = keys(&fields).collect();
+        let collected: Vec<_> = keys(&fields).map(|k| k.to_string()).collect();
         assert_eq!(collected, expected);
     }
 
@@ -52,10 +54,10 @@ mod test {
             "a.b.c",
         ]
         .into_iter()
-        .map(KeyString::from)
+        .map(String::from)
         .collect();
 
-        let collected: Vec<_> = keys(&fields).collect();
+        let collected: Vec<_> = keys(&fields).map(|k| k.to_string()).collect();
         assert_eq!(collected, expected);
     }
 }

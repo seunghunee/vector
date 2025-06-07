@@ -1548,18 +1548,20 @@ mod tests {
             .await;
 
             assert_eq!(received.len(), 1);
+            let keys: Vec<_> = received[0]
+                .as_log()
+                .keys()
+                .unwrap()
+                .map(|k| k.path)
+                .collect();
             assert_eq!(
-                received[0].as_log().keys().unwrap().collect::<HashSet<_>>(),
+                keys.iter().collect::<HashSet<_>>(),
                 vec![
-                    default_file_key()
-                        .path
-                        .expect("file key to exist")
-                        .to_string()
-                        .into(),
-                    log_schema().host_key().unwrap().to_string().into(),
-                    log_schema().message_key().unwrap().to_string().into(),
-                    log_schema().timestamp_key().unwrap().to_string().into(),
-                    log_schema().source_type_key().unwrap().to_string().into()
+                    &default_file_key().path.expect("file key to exist"),
+                    log_schema().host_key().unwrap(),
+                    log_schema().message_key().unwrap(),
+                    log_schema().timestamp_key().unwrap(),
+                    log_schema().source_type_key().unwrap(),
                 ]
                 .into_iter()
                 .collect::<HashSet<_>>()
