@@ -1,31 +1,27 @@
-use std::{collections::btree_map, iter, slice, str::FromStr, sync::LazyLock};
+use std::{collections::btree_map, iter, slice, str::FromStr};
 
 use lookup::OwnedValuePath;
-use regex::Regex;
 use serde::{Serialize, Serializer};
 use vrl::path::{OwnedSegment, OwnedTargetPath, PathPrefix};
 
 use crate::event::{KeyString, ObjectMap, Value};
 
-static IS_VALID_PATH_SEGMENT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9_]+$").unwrap());
-
 /// Iterates over all paths in form `a.b[0].c[1]` in alphabetical order
 /// and their corresponding values.
 pub fn all_fields(fields: &ObjectMap) -> FieldsIter {
-    FieldsIter::new(None, fields, true)
+    FieldsIter::new(None, fields)
 }
 
 /// Iterates over all paths in form `a.b[0].c[1]` in alphabetical order and their corresponding
 /// values. Field names containing meta-characters are not quoted.
 pub fn all_fields_unquoted(fields: &ObjectMap) -> FieldsIter {
-    FieldsIter::new(None, fields, false)
+    FieldsIter::new(None, fields)
 }
 
 /// Same functionality as `all_fields` but it prepends a character that denotes the
 /// path type.
 pub fn all_metadata_fields(fields: &ObjectMap) -> FieldsIter {
-    FieldsIter::new(Some(PathPrefix::Metadata), fields, true)
+    FieldsIter::new(Some(PathPrefix::Metadata), fields)
 }
 
 /// An iterator with a single "message" element
@@ -65,22 +61,15 @@ pub struct FieldsIter<'a> {
     path: Vec<PathComponent<'a>>,
     /// Treat array as a single value and don't traverse each element.
     skip_array_elements: bool,
-    /// Surround invalid fields with quotes to make them parsable.
-    quote_invalid_fields: bool,
 }
 
 impl<'a> FieldsIter<'a> {
-    fn new(
-        path_prefix: Option<PathPrefix>,
-        fields: &'a ObjectMap,
-        quote_invalid_fields: bool,
-    ) -> FieldsIter<'a> {
+    fn new(path_prefix: Option<PathPrefix>, fields: &'a ObjectMap) -> FieldsIter<'a> {
         FieldsIter {
             path_prefix,
             stack: vec![LeafIter::Map(fields.iter())],
             path: vec![],
             skip_array_elements: false,
-            quote_invalid_fields,
         }
     }
 
@@ -92,7 +81,6 @@ impl<'a> FieldsIter<'a> {
             stack: vec![LeafIter::Root((value, false))],
             path: vec![],
             skip_array_elements: false,
-            quote_invalid_fields: true,
         }
     }
 
@@ -102,7 +90,6 @@ impl<'a> FieldsIter<'a> {
             stack: vec![LeafIter::Map(fields.iter())],
             path: vec![],
             skip_array_elements: true,
-            quote_invalid_fields: true,
         }
     }
 
@@ -137,14 +124,8 @@ impl<'a> FieldsIter<'a> {
             .iter()
             .chain(iter::once(&component))
             .map(|c| match c {
-                PathComponent::Key(key) => {
-                    if self.quote_invalid_fields && !IS_VALID_PATH_SEGMENT.is_match(key) {
-                        OwnedSegment::Field(KeyString::from(format!("\"{key}\"")))
-                    } else {
-                        OwnedSegment::Field(KeyString::from((*key).clone()))
-                    }
-                }
-                PathComponent::Index(index) => OwnedSegment::Index(*index as isize), // TODO
+                PathComponent::Key(key) => OwnedSegment::Field((*key).clone()),
+                PathComponent::Index(index) => OwnedSegment::Index(*index as isize),
             })
             .collect();
 
